@@ -36,6 +36,7 @@ Key behaviors:
 - Never ask more than one question at a time
 - After 3-4 exchanges, you have enough to make a recommendation
 - Always explain WHY you're recommending something — connect gear to their specific situation
+- BUDGET: Honoring the customer's stated budget is non-negotiable. When a customer gives a price ("around $3500", "about $500", "my budget is $1200"), ALWAYS pass that exact number as target_price in search_products — do NOT omit it. The search ranks results by proximity to that price, so without target_price you will return the cheapest items in the catalog, not the ones that match the customer's budget. Never recommend products far below the customer's stated budget without explicitly asking if they want a more affordable option.
 - CATALOG SCOPE: SoundCraft specializes in guitars, bass, drums, keys, microphones, amplifiers, recording gear, effects pedals, and accessories. If a customer asks about something outside this catalog (violins, orchestral instruments, brass, woodwinds, etc.), be upfront and warm: "That's actually outside our specialty at SoundCraft — we focus on guitars, keys, drums, and recording gear. For that I'd point you toward a dedicated orchestral shop." Do NOT pretend it is a search tool failure.
 - If a search returns empty results, retry with a broader category term before giving up (e.g. try "Guitar" if "Acoustic Guitar beginner" returns nothing). Never tell the customer the search tool is broken or having technical issues.
 - When you have enough context to make recommendations, call create_se_handoff to log the session
@@ -60,6 +61,7 @@ def search_products(
     skill_level: str = None,
     max_price: float = None,
     min_price: float = None,
+    target_price: float = None,
     use_case: str = None,
     brand: str = None,
 ) -> list[dict]:
@@ -87,12 +89,17 @@ def search_products(
             params.append(f"%{brand}%")
 
         where = " AND ".join(conditions)
+        # Sort by proximity to target_price when given; otherwise cheapest first
+        if target_price is not None:
+            order_clause = f"ABS(price - {float(target_price)})"
+        else:
+            order_clause = "price ASC"
         rows = con.execute(f"""
             SELECT product_id, product_name, brand, subcategory,
                    price, skill_level, use_case, price_tier
             FROM main.dim_products
             WHERE {where}
-            ORDER BY price ASC
+            ORDER BY {order_clause}
             LIMIT 5
         """, params).fetchall()
         cols = ["product_id", "product_name", "brand", "subcategory",
@@ -202,12 +209,13 @@ TOOLS = [
             parameters=types.Schema(
                 type=types.Type.OBJECT,
                 properties={
-                    "category":    types.Schema(type=types.Type.STRING, description="Product category or subcategory e.g. Guitar, Acoustic Guitar, Electric Guitar, Bass Guitar, Amplifier, Drums, Keys, Microphones, Recording, Pedals, Accessories"),
-                    "skill_level": types.Schema(type=types.Type.STRING, description="Customer skill level: beginner, intermediate, advanced"),
-                    "max_price":   types.Schema(type=types.Type.NUMBER, description="Maximum price in USD"),
-                    "min_price":   types.Schema(type=types.Type.NUMBER, description="Minimum price in USD"),
-                    "use_case":    types.Schema(type=types.Type.STRING, description="Use case: practice, live performance, studio recording, home studio"),
-                    "brand":       types.Schema(type=types.Type.STRING, description="Specific brand name"),
+                    "category":     types.Schema(type=types.Type.STRING, description="Product category or subcategory e.g. Guitar, Acoustic Guitar, Electric Guitar, Bass Guitar, Amplifier, Drums, Keys, Microphones, Recording, Pedals, Accessories"),
+                    "skill_level":  types.Schema(type=types.Type.STRING, description="Customer skill level: beginner, intermediate, advanced"),
+                    "max_price":    types.Schema(type=types.Type.NUMBER, description="Hard upper price limit in USD. Only set when customer says 'under X' or 'no more than X'."),
+                    "min_price":    types.Schema(type=types.Type.NUMBER, description="Hard lower price limit in USD."),
+                    "target_price": types.Schema(type=types.Type.NUMBER, description="The customer's stated budget or 'around X' price. Results are sorted by closest match to this price. ALWAYS set this when the customer gives a budget or price point."),
+                    "use_case":     types.Schema(type=types.Type.STRING, description="Use case: practice, live performance, studio recording, home studio"),
+                    "brand":        types.Schema(type=types.Type.STRING, description="Specific brand name"),
                 },
             ),
         ),
