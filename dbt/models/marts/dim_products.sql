@@ -24,7 +24,8 @@ enriched as (
         end                                         as price_tier,
 
         -- denormalized skill array for overlap matching
-        string_split(skill_level, '-')              as skill_levels_array
+        string_split(skill_level, '-')              as skill_levels_array,
+        manufacturer_url
     from products
 )
 

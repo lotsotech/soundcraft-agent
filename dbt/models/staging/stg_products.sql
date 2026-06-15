@@ -13,7 +13,8 @@ renamed as (
         description,
         skill_level,
         use_case,
-        cast(in_stock as boolean)                   as in_stock
+        cast(in_stock as boolean)                   as in_stock,
+        manufacturer_url
     from source
 )
 

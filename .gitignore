@@ -2,8 +2,12 @@
 db/
 dbt/target/
 dbt/dbt_packages/
+dbt/logs/
+dbt/.user.yml
 __pycache__/
 *.pyc
 .streamlit/secrets.toml
 *.duckdb
 *.duckdb.wal
+streamlit.log
+.claude/

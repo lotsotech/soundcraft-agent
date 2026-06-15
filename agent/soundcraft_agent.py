@@ -1,18 +1,22 @@
 """
 SoundCraft First-Touch Sales Agent
-Powered by Gemini 2.0 Flash with function calling against DuckDB product catalog.
+Powered by Gemini 2.5 Flash with function calling against DuckDB product catalog.
 """
 import json
 import os
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 import duckdb
 import google.generativeai as genai
+from agent.config import get_secret
 
-DB_PATH = Path(__file__).parent.parent / "db" / "soundcraft.duckdb"
+_repo_db = Path(__file__).parent.parent / "db" / "soundcraft.duckdb"
+_tmp_db  = Path("/tmp/soundcraft.duckdb")
+DB_PATH  = _tmp_db if not _repo_db.parent.exists() else _repo_db
 
 SYSTEM_PROMPT = """You are Jamie, a knowledgeable first-touch Sales Advisor at SoundCraft — a premier music gear retailer.
 
@@ -32,13 +36,22 @@ Key behaviors:
 - Never ask more than one question at a time
 - After 3-4 exchanges, you have enough to make a recommendation
 - Always explain WHY you're recommending something — connect gear to their specific situation
-- Be honest about limitations: "That's a great question — let me get you connected with one of our specialists who can go deeper on that"
-- When you have enough context, call create_se_handoff to log the session
+- When you have enough context to make recommendations, call create_se_handoff to log the session
+- ESCALATION: If the customer explicitly asks to speak to a human, talk to a person, or requests a Sales Engineer at any point, you MUST immediately call create_se_handoff with priority="high" and tell the customer warmly that a specialist is on their way. Do not keep chatting — trigger the handoff right away.
 
 You represent SoundCraft's brand promise: the knowledgeable friend in the room, not a chatbot."""
 
 
-# ── Tool definitions for Gemini function calling ──────────────────────────────
+# ── JSON encoder ──────────────────────────────────────────────────────────────
+
+class _SafeEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return float(obj)
+        return super().default(obj)
+
+
+# ── Tool implementations ───────────────────────────────────────────────────────
 
 def search_products(
     category: str = None,
@@ -55,8 +68,8 @@ def search_products(
         params = []
 
         if category:
-            conditions.append("lower(category) LIKE lower(?)")
-            params.append(f"%{category}%")
+            conditions.append("(lower(category) LIKE lower(?) OR lower(subcategory) LIKE lower(?))")
+            params.extend([f"%{category}%", f"%{category}%"])
         if skill_level:
             conditions.append("lower(skill_level) LIKE lower(?)")
             params.append(f"%{skill_level}%")
@@ -74,18 +87,24 @@ def search_products(
             params.append(f"%{brand}%")
 
         where = " AND ".join(conditions)
+        # Return only fields the model needs to reason about — description and
+        # manufacturer_url are fetched on-demand via get_product_details to keep
+        # tool payloads small and reduce tokens per turn.
         query = f"""
-            SELECT product_id, product_name, brand, category, subcategory,
-                   price, description, skill_level, use_case, price_tier
+            SELECT product_id, product_name, brand, subcategory,
+                   price, skill_level, use_case, price_tier
             FROM main.dim_products
             WHERE {where}
             ORDER BY price ASC
-            LIMIT 10
+            LIMIT 5
         """
         rows = con.execute(query, params).fetchall()
-        cols = ["product_id", "product_name", "brand", "category", "subcategory",
-                "price", "description", "skill_level", "use_case", "price_tier"]
-        return [dict(zip(cols, row)) for row in rows]
+        cols = ["product_id", "product_name", "brand", "subcategory",
+                "price", "skill_level", "use_case", "price_tier"]
+        return [
+            {k: float(v) if isinstance(v, Decimal) else v for k, v in zip(cols, row)}
+            for row in rows
+        ]
     finally:
         con.close()
 
@@ -96,15 +115,17 @@ def get_product_details(product_id: str) -> dict:
     try:
         row = con.execute(
             """SELECT product_id, product_name, brand, category, subcategory,
-                      price, description, skill_level, use_case, price_tier, in_stock
+                      price, description, skill_level, use_case, price_tier, in_stock,
+                      manufacturer_url
                FROM main.dim_products WHERE product_id = ?""",
             [product_id],
         ).fetchone()
         if not row:
             return {"error": f"Product {product_id} not found"}
         cols = ["product_id", "product_name", "brand", "category", "subcategory",
-                "price", "description", "skill_level", "use_case", "price_tier", "in_stock"]
-        return dict(zip(cols, row))
+                "price", "description", "skill_level", "use_case", "price_tier", "in_stock",
+                "manufacturer_url"]
+        return {k: float(v) if isinstance(v, Decimal) else v for k, v in zip(cols, row)}
     finally:
         con.close()
 
@@ -120,27 +141,26 @@ def create_se_handoff(
     conversation_summary: str,
     priority: str = "medium",
 ) -> dict:
-    """
-    Log a completed session as a Sales Engineer handoff record.
-    Call this once you have enough context and have made recommendations.
-    """
+    """Log a completed session as a Sales Engineer handoff record."""
     con = duckdb.connect(str(DB_PATH))
     try:
-        # Ensure handoff table exists
         con.execute("""
             CREATE TABLE IF NOT EXISTS agent_handoffs (
-                handoff_id      VARCHAR PRIMARY KEY,
-                session_id      VARCHAR,
-                customer_name   VARCHAR,
-                skill_level     VARCHAR,
-                primary_instrument VARCHAR,
-                use_case        VARCHAR,
-                budget_range    VARCHAR,
-                existing_gear   VARCHAR,
+                handoff_id           VARCHAR PRIMARY KEY,
+                session_id           VARCHAR,
+                customer_name        VARCHAR,
+                skill_level          VARCHAR,
+                primary_instrument   VARCHAR,
+                use_case             VARCHAR,
+                budget_range         VARCHAR,
+                existing_gear        VARCHAR,
                 recommended_products JSON,
                 conversation_summary VARCHAR,
-                priority        VARCHAR,
-                created_at      TIMESTAMP
+                priority             VARCHAR,
+                status               VARCHAR DEFAULT 'new',
+                claimed_by           VARCHAR,
+                claimed_at           TIMESTAMP,
+                created_at           TIMESTAMP
             )
         """)
 
@@ -149,7 +169,11 @@ def create_se_handoff(
         now = datetime.utcnow()
 
         con.execute(
-            """INSERT INTO agent_handoffs VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            """INSERT INTO agent_handoffs
+               (handoff_id, session_id, customer_name, skill_level, primary_instrument,
+                use_case, budget_range, existing_gear, recommended_products,
+                conversation_summary, priority, status, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,'new',?)""",
             [
                 handoff_id, session_id, customer_name, skill_level,
                 primary_instrument, use_case, budget_range, existing_gear,
@@ -160,8 +184,30 @@ def create_se_handoff(
         return {
             "status": "success",
             "handoff_id": handoff_id,
+            "session_id": session_id,
             "message": f"Handoff {handoff_id} logged and routed to a SoundCraft Sales Engineer.",
         }
+    finally:
+        con.close()
+
+
+def save_transcript(session_id: str, messages: list[dict]):
+    """Persist the full chat transcript for SE review."""
+    con = duckdb.connect(str(DB_PATH))
+    try:
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS chat_transcripts (
+                session_id  VARCHAR PRIMARY KEY,
+                messages    JSON,
+                updated_at  TIMESTAMP
+            )
+        """)
+        con.execute("""
+            INSERT INTO chat_transcripts VALUES (?, ?, ?)
+            ON CONFLICT (session_id) DO UPDATE SET
+                messages = excluded.messages,
+                updated_at = excluded.updated_at
+        """, [session_id, json.dumps(messages, cls=_SafeEncoder), datetime.utcnow()])
     finally:
         con.close()
 
@@ -177,7 +223,7 @@ TOOLS = [
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "category":    {"type": "string", "description": "Product category e.g. Guitar, Amplifier, Drums, Keys, Microphones, Recording, Accessories"},
+                        "category":    {"type": "string", "description": "Product category or subcategory e.g. Guitar, Acoustic Guitar, Electric Guitar, Bass Guitar, Amplifier, Drums, Keys, Microphones, Recording, Pedals, Accessories"},
                         "skill_level": {"type": "string", "description": "Customer skill level: beginner, intermediate, advanced"},
                         "max_price":   {"type": "number", "description": "Maximum price in USD"},
                         "min_price":   {"type": "number", "description": "Minimum price in USD"},
@@ -192,14 +238,14 @@ TOOLS = [
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "product_id": {"type": "string", "description": "The product ID e.g. P001"},
+                        "product_id": {"type": "string", "description": "The product ID e.g. P0001"},
                     },
                     "required": ["product_id"],
                 },
             },
             {
                 "name": "create_se_handoff",
-                "description": "Log this customer session as a Sales Engineer handoff. Call this after making recommendations to create a warm lead record.",
+                "description": "Log this customer session as a Sales Engineer handoff. Call this after making recommendations OR immediately if customer requests a human.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -211,7 +257,7 @@ TOOLS = [
                         "existing_gear":           {"type": "string", "description": "Gear the customer already owns"},
                         "recommended_product_ids": {"type": "array", "items": {"type": "string"}},
                         "conversation_summary":    {"type": "string", "description": "2-3 sentence warm summary for the SE"},
-                        "priority":                {"type": "string", "enum": ["low", "medium", "high"], "description": "Lead priority based on budget and purchase intent"},
+                        "priority":                {"type": "string", "enum": ["low", "medium", "high"], "description": "Use 'high' if customer explicitly requested a human"},
                     },
                     "required": [
                         "customer_name", "skill_level", "primary_instrument",
@@ -225,9 +271,9 @@ TOOLS = [
 ]
 
 TOOL_DISPATCH: dict[str, Any] = {
-    "search_products":   search_products,
+    "search_products":     search_products,
     "get_product_details": get_product_details,
-    "create_se_handoff": create_se_handoff,
+    "create_se_handoff":   create_se_handoff,
 }
 
 
@@ -235,45 +281,45 @@ TOOL_DISPATCH: dict[str, Any] = {
 
 class SoundCraftAgent:
     def __init__(self):
-        api_key = os.environ.get("GOOGLE_API_KEY")
-        if not api_key:
-            raise ValueError("GOOGLE_API_KEY environment variable not set")
+        api_key = get_secret("GOOGLE_API_KEY")
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash",
+            model_name="gemini-2.5-flash",
             system_instruction=SYSTEM_PROMPT,
             tools=TOOLS,
         )
         self.chat = self.model.start_chat(history=[])
         self.handoff_logged = False
+        self.session_id: str | None = None
+        self.last_recommended_ids: list[str] = []
 
-    def send(self, user_message: str) -> tuple[str, dict | None]:
+    def send(self, user_message: str, transcript: list[dict]) -> tuple[str, dict | None]:
         """
         Send a message and handle any tool calls.
         Returns (assistant_text, handoff_record_or_None).
+        transcript is the full UI message list for persistence.
         """
         response = self.chat.send_message(user_message)
         handoff_result = None
 
-        # Agentic loop: keep processing tool calls until we get a text response
         while True:
             candidate = response.candidates[0]
 
-            # Check for function calls in the response parts
             tool_calls = [
                 part for part in candidate.content.parts
                 if hasattr(part, "function_call") and part.function_call.name
             ]
 
             if not tool_calls:
-                # Pure text response — we're done
                 text = "".join(
                     part.text for part in candidate.content.parts
                     if hasattr(part, "text")
                 )
+                # Persist transcript if we have a session
+                if self.session_id:
+                    save_transcript(self.session_id, transcript)
                 return text.strip(), handoff_result
 
-            # Execute all tool calls and collect results
             tool_results = []
             for part in tool_calls:
                 fn_name = part.function_call.name
@@ -285,6 +331,12 @@ class SoundCraftAgent:
                     if fn_name == "create_se_handoff" and result.get("status") == "success":
                         handoff_result = result
                         self.handoff_logged = True
+                        self.session_id = result.get("session_id")
+                        self.last_recommended_ids = fn_args.get("recommended_product_ids", [])
+                        save_transcript(self.session_id, transcript)
+                elif fn_name == "search_products":
+                        # Track the most recently surfaced product IDs for card rendering
+                        self.last_recommended_ids = [r["product_id"] for r in result if isinstance(result, list)]
                 else:
                     result = {"error": f"Unknown tool: {fn_name}"}
 
@@ -292,10 +344,9 @@ class SoundCraftAgent:
                     genai.protos.Part(
                         function_response=genai.protos.FunctionResponse(
                             name=fn_name,
-                            response={"result": json.dumps(result)},
+                            response={"result": json.dumps(result, cls=_SafeEncoder)},
                         )
                     )
                 )
 
-            # Feed tool results back to the model
             response = self.chat.send_message(tool_results)
