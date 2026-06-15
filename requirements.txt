@@ -1,0 +1,6 @@
+duckdb>=0.10.0
+dbt-core>=1.7.0
+dbt-duckdb>=1.7.0
+google-generativeai>=0.8.0
+streamlit>=1.35.0
+python-dotenv>=1.0.0

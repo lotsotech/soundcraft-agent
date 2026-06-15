@@ -1,0 +1,6 @@
+customer_id,first_name,last_name,email,skill_level,primary_instrument,years_playing,use_case,budget_range,created_at
+C001,Alex,Rivera,alex.rivera@email.com,beginner,guitar,1,practice,0-500,2024-01-15
+C002,Jordan,Kim,jordan.kim@email.com,intermediate,drums,5,live performance,500-2000,2024-02-20
+C003,Taylor,Nguyen,taylor.nguyen@email.com,advanced,keys,12,studio recording,2000+,2024-03-10
+C004,Morgan,Patel,morgan.patel@email.com,beginner,vocals,0,home studio,0-500,2024-04-05
+C005,Casey,Williams,casey.williams@email.com,intermediate,guitar,7,home studio,500-2000,2024-05-18

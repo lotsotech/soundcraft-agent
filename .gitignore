@@ -1,0 +1,9 @@
+.env
+db/
+dbt/target/
+dbt/dbt_packages/
+__pycache__/
+*.pyc
+.streamlit/secrets.toml
+*.duckdb
+*.duckdb.wal

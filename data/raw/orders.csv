@@ -1,0 +1,14 @@
+order_id,customer_id,product_id,quantity,unit_price,order_date,status
+O001,C001,P004,1,199.99,2024-01-20,completed
+O002,C001,P605,2,6.99,2024-01-20,completed
+O003,C002,P201,1,1499.99,2024-03-01,completed
+O004,C002,P203,1,349.99,2024-04-15,completed
+O005,C003,P301,1,699.99,2024-03-15,completed
+O006,C003,P502,1,899.99,2024-04-20,completed
+O007,C003,P504,1,749.00,2024-05-01,completed
+O008,C004,P401,1,99.99,2024-04-10,completed
+O009,C004,P503,1,49.99,2024-04-10,completed
+O010,C005,P001,1,849.99,2024-06-01,completed
+O011,C005,P103,1,699.99,2024-06-01,completed
+O012,C001,P101,1,229.99,2024-08-15,completed
+O013,C002,P204,1,349.99,2024-09-10,completed

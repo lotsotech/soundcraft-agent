@@ -1,0 +1,3 @@
+handoff_id,session_id,customer_snapshot,recommended_products,conversation_summary,priority,created_at,assigned_se
+H001,S001,"{""name"":""Alex"",""skill"":""beginner"",""instrument"":""guitar"",""budget"":300}","[""P004"",""P605"",""P604""]","Customer is a first-time guitar buyer. Budget-conscious. Interested in acoustic for home practice. Warm and engaged during chat.",medium,2024-01-14,Sarah Chen
+H002,S002,"{""name"":""Jordan"",""skill"":""intermediate"",""instrument"":""drums"",""budget"":1500}","[""P201"",""P203""]","Drummer upgrading from a basic kit. Needs apartment-friendly solution. Asked detailed questions about mesh heads and noise levels.",high,2024-02-18,Mike Torres

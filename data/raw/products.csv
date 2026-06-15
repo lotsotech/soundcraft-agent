@@ -1,0 +1,38 @@
+product_id,name,brand,category,subcategory,price,description,skill_level,use_case,in_stock
+P001,Fender Player Stratocaster,Fender,Guitar,Electric Guitar,849.99,"Classic strat tones, smooth neck, versatile for any genre",beginner-intermediate,live performance,true
+P002,Gibson Les Paul Standard,Gibson,Guitar,Electric Guitar,2499.99,"Thick humbucker tone, mahogany body, sustain for days",intermediate-advanced,studio recording,true
+P003,Martin D-28 Acoustic,Martin,Guitar,Acoustic Guitar,2999.99,"Legendary dreadnought, Sitka spruce top, studio-grade tone",intermediate-advanced,studio recording,true
+P004,Yamaha FG800 Acoustic,Yamaha,Guitar,Acoustic Guitar,199.99,"Solid spruce top, great starter acoustic, excellent value",beginner,practice,true
+P005,PRS SE Custom 24,PRS,Guitar,Electric Guitar,779.99,"Versatile humbuckers, beautiful maple top, wide-fat neck",intermediate,live performance,true
+P006,Fender American Professional II Telecaster,Fender,Guitar,Electric Guitar,1549.99,"Nashville tone, V-mod pickups, superior build quality",intermediate-advanced,live performance,true
+P007,Gretsch G2622 Streamliner,Gretsch,Guitar,Electric Guitar,449.99,"Semi-hollow body, classic rock and jazz tones",intermediate,studio recording,true
+P008,Epiphone Les Paul Standard,Epiphone,Guitar,Electric Guitar,449.99,"Affordable humbucker tones, great beginner upgrade",beginner-intermediate,practice,true
+P101,Fender Rumble 40 Bass Amp,Fender,Amplifier,Bass Amp,229.99,"Portable 40W bass amp, contour switch, great for practice",beginner-intermediate,practice,true
+P102,Marshall DSL40CR,Marshall,Amplifier,Guitar Amp,849.99,"40W tube combo, classic Marshall crunch, built-in reverb",intermediate-advanced,live performance,true
+P103,Fender Blues Junior IV,Fender,Amplifier,Guitar Amp,699.99,"15W tube combo, chimey clean tones, spring reverb",intermediate,studio recording,true
+P104,Boss Katana-50 MkII,Boss,Amplifier,Guitar Amp,299.99,"50W solid state, 5 amp characters, great fx built in",beginner-intermediate,practice,true
+P105,Line 6 Helix LT,Line 6,Amplifier,Modeler,1199.99,"Pro-grade amp modeling, 128 presets, world-class effects",intermediate-advanced,live performance,true
+P106,Vox AC15C1,Vox,Amplifier,Guitar Amp,699.99,"15W tube combo, EL84 power section, iconic chime",intermediate-advanced,studio recording,true
+P201,Roland TD-17KVX Electronic Drum Kit,Roland,Drums,Electronic Kit,1499.99,"Mesh heads, 50 kits, quiet enough for apartment practice",beginner-intermediate,practice,true
+P202,Pearl Export Series 5-Piece,Pearl,Drums,Acoustic Kit,999.99,"Full acoustic kit, poplar shells, hardware included",beginner-intermediate,live performance,true
+P203,Zildjian A Custom 14 Hi-Hats,Zildjian,Drums,Cymbals,349.99,"Brilliant finish, crisp articulate sound, studio favorite",intermediate-advanced,studio recording,true
+P204,DW Design Series Snare,DW,Drums,Snare,349.99,"Maple shell, die-cast hoops, wide tuning range",intermediate,live performance,true
+P301,Native Instruments Komplete Kontrol S61,Native Instruments,Keys,MIDI Controller,699.99,"61-key semi-weighted, NKS integration, Light Guide",intermediate-advanced,studio recording,true
+P302,Arturia KeyLab Essential 49,Arturia,Keys,MIDI Controller,199.99,"49 keys, DAW integration, great starter controller",beginner,home studio,true
+P303,Nord Stage 4 Compact,Nord,Keys,Stage Piano,3999.99,"Professional stage piano, triple sensor waterfall keys",advanced,live performance,true
+P304,Casio CT-S300 Portable Keyboard,Casio,Keys,Keyboard,49.99,"61 keys, 48 polyphony, battery powered, great beginner",beginner,practice,true
+P401,Shure SM58 Vocal Microphone,Shure,Microphones,Dynamic Mic,99.99,"Industry standard vocal mic, rugged, live and studio use",beginner-advanced,live performance,true
+P402,Audio-Technica AT2020 Condenser,Audio-Technica,Microphones,Condenser Mic,99.99,"Cardioid condenser, extended frequency response, studio use",beginner-intermediate,studio recording,true
+P403,Rode NT1 Condenser,Rode,Microphones,Condenser Mic,269.99,"Ultra-low noise, self-noise 4.5dB, home studio essential",intermediate-advanced,studio recording,true
+P404,Shure SM7dB Active Dynamic,Shure,Microphones,Dynamic Mic,399.99,"Built-in preamp, broadcast quality, podcasting and vocals",intermediate-advanced,home studio,true
+P501,Focusrite Scarlett 2i2 4th Gen,Focusrite,Recording,Audio Interface,179.99,"2-in/2-out USB-C, Air mode, professional preamps",beginner-intermediate,home studio,true
+P502,Universal Audio Apollo Twin X,Universal Audio,Recording,Audio Interface,899.99,"Thunderbolt, UAD DSP processing, elite preamps",advanced,studio recording,true
+P503,PreSonus AudioBox GO,PreSonus,Recording,Audio Interface,49.99,"Bus-powered USB, 2-in/2-out, ultra portable",beginner,home studio,true
+P504,Ableton Live 11 Suite,Ableton,Recording,DAW Software,749.00,"Complete music production, 70GB sounds, Max for Live",intermediate-advanced,home studio,true
+P505,Logic Pro,Apple,Recording,DAW Software,199.99,"Industry standard Mac DAW, 2500 instruments, Dolby Atmos",intermediate-advanced,studio recording,true
+P506,GarageBand,Apple,Recording,DAW Software,0.00,"Free Mac DAW, 1000 loops, perfect beginner starting point",beginner,home studio,true
+P601,Boss TU-3 Chromatic Tuner,Boss,Accessories,Tuner,59.99,"Stage-ready tuner, true bypass, supports all instruments",beginner-advanced,live performance,true
+P602,Ernie Ball Regular Slinky Strings,Ernie Ball,Accessories,Strings,6.99,"10-46 gauge electric strings, most popular choice worldwide",beginner-advanced,practice,true
+P603,Mogami Gold Instrument Cable 18ft,Mogami,Accessories,Cables,59.99,"Gold-plated connectors, ultra-quiet, lifetime warranty",intermediate-advanced,live performance,true
+P604,On-Stage Stands Guitar Stand,On-Stage,Accessories,Stands,24.99,"A-frame guitar stand, rubber padding, compact folding",beginner-advanced,practice,true
+P605,Fender 351 Premium Picks 12-Pack,Fender,Accessories,Picks,6.99,"Celluloid picks, classic shape, mixed gauges sampler",beginner-advanced,practice,true
