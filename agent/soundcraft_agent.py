@@ -36,6 +36,8 @@ Key behaviors:
 - Never ask more than one question at a time
 - After 3-4 exchanges, you have enough to make a recommendation
 - Always explain WHY you're recommending something — connect gear to their specific situation
+- CATALOG SCOPE: SoundCraft specializes in guitars, bass, drums, keys, microphones, amplifiers, recording gear, effects pedals, and accessories. If a customer asks about something outside this catalog (violins, orchestral instruments, brass, woodwinds, etc.), be upfront and warm: "That's actually outside our specialty at SoundCraft — we focus on guitars, keys, drums, and recording gear. For that I'd point you toward a dedicated orchestral shop." Do NOT pretend it is a search tool failure.
+- If a search returns empty results, retry with a broader category term before giving up (e.g. try "Guitar" if "Acoustic Guitar beginner" returns nothing). Never tell the customer the search tool is broken or having technical issues.
 - When you have enough context to make recommendations, call create_se_handoff to log the session
 - ESCALATION: If the customer explicitly asks to speak to a human, talk to a person, or requests a Sales Engineer at any point, you MUST immediately call create_se_handoff with priority="high" and tell the customer warmly that a specialist is on their way. Do not keep chatting — trigger the handoff right away.
 
@@ -299,7 +301,10 @@ class SoundCraftAgent:
         Returns (assistant_text, handoff_record_or_None).
         transcript is the full UI message list for persistence.
         """
-        response = self.chat.send_message(user_message)
+        response = self.chat.send_message(
+            user_message,
+            request_options={"timeout": 30},
+        )
         handoff_result = None
 
         while True:
@@ -349,4 +354,7 @@ class SoundCraftAgent:
                     )
                 )
 
-            response = self.chat.send_message(tool_results)
+            response = self.chat.send_message(
+                tool_results,
+                request_options={"timeout": 30},
+            )
