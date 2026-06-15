@@ -3,7 +3,13 @@ Auto-seeds DuckDB on startup. On Streamlit Cloud, runs pure DuckDB SQL
 instead of dbt to avoid the heavy dbt dependency at runtime.
 Locally, dbt is still used via scripts/seed_db.py.
 """
-import fcntl
+try:
+    import fcntl as _fcntl
+    def _lock(fh): _fcntl.flock(fh, _fcntl.LOCK_EX)
+except ImportError:
+    # Windows — no concurrent Streamlit workers, so no-op is safe locally
+    def _lock(fh): pass
+
 from pathlib import Path
 
 DATA_PATH = Path(__file__).parent.parent / "data" / "raw"
@@ -26,7 +32,7 @@ def ensure_db():
 
     # File lock prevents concurrent Streamlit threads from both seeding
     with open(_lock_file, "w") as lf:
-        fcntl.flock(lf, fcntl.LOCK_EX)
+        _lock(lf)
         if db_path.exists():  # re-check after acquiring lock
             return
 
