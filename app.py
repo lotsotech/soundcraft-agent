@@ -17,7 +17,7 @@ DB_PATH = get_db_path()
 
 st.set_page_config(
     page_title="SoundCraft | Find Your Sound",
-    page_icon="🎸",
+    page_icon="🎵",
     layout="centered",
 )
 
@@ -50,13 +50,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── Header ────────────────────────────────────────────────────────────────────
-col1, col2 = st.columns([3, 1])
-with col1:
-    st.title("🎸 SoundCraft")
-    st.caption("Your personal gear advisor — powered by AI, backed by human experts")
-with col2:
-    st.image("https://img.icons8.com/fluency/96/guitar.png", width=72)
-
+st.image("assets/soundcraft_logo.png", width=320)
+st.caption("Your personal gear advisor — powered by AI, backed by human experts")
 st.divider()
 
 

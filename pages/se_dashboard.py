@@ -46,8 +46,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── Header ────────────────────────────────────────────────────────────────────
-st.title("🧑‍💼 SoundCraft SE Dashboard")
-st.caption("Internal view — live customer handoff queue")
+col_logo, col_title = st.columns([1, 4])
+with col_logo:
+    st.image("assets/soundcraft_logo.png", width=180)
+with col_title:
+    st.markdown("## SE Dashboard")
+    st.caption("Internal view — live customer handoff queue")
 
 # SE identity selector (simulates login for demo purposes)
 se_name = st.sidebar.selectbox(
