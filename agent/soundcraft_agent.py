@@ -3,7 +3,6 @@ SoundCraft First-Touch Sales Agent
 Powered by Gemini 2.5 Flash with function calling against DuckDB product catalog.
 """
 import json
-import os
 import uuid
 from datetime import datetime
 from decimal import Decimal
@@ -11,7 +10,8 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from agent.config import get_secret
 
 _repo_db = Path(__file__).parent.parent / "db" / "soundcraft.duckdb"
@@ -63,12 +63,10 @@ def search_products(
     use_case: str = None,
     brand: str = None,
 ) -> list[dict]:
-    """Search the SoundCraft product catalog with filters."""
     con = duckdb.connect(str(DB_PATH), read_only=True)
     try:
         conditions = ["in_stock = true"]
         params = []
-
         if category:
             conditions.append("(lower(category) LIKE lower(?) OR lower(subcategory) LIKE lower(?))")
             params.extend([f"%{category}%", f"%{category}%"])
@@ -89,44 +87,36 @@ def search_products(
             params.append(f"%{brand}%")
 
         where = " AND ".join(conditions)
-        # Return only fields the model needs to reason about — description and
-        # manufacturer_url are fetched on-demand via get_product_details to keep
-        # tool payloads small and reduce tokens per turn.
-        query = f"""
+        rows = con.execute(f"""
             SELECT product_id, product_name, brand, subcategory,
                    price, skill_level, use_case, price_tier
             FROM main.dim_products
             WHERE {where}
             ORDER BY price ASC
             LIMIT 5
-        """
-        rows = con.execute(query, params).fetchall()
+        """, params).fetchall()
         cols = ["product_id", "product_name", "brand", "subcategory",
                 "price", "skill_level", "use_case", "price_tier"]
-        return [
-            {k: float(v) if isinstance(v, Decimal) else v for k, v in zip(cols, row)}
-            for row in rows
-        ]
+        return [{k: float(v) if isinstance(v, Decimal) else v for k, v in zip(cols, row)}
+                for row in rows]
     finally:
         con.close()
 
 
 def get_product_details(product_id: str) -> dict:
-    """Get full details for a specific product by ID."""
     con = duckdb.connect(str(DB_PATH), read_only=True)
     try:
-        row = con.execute(
-            """SELECT product_id, product_name, brand, category, subcategory,
-                      price, description, skill_level, use_case, price_tier, in_stock,
-                      manufacturer_url
-               FROM main.dim_products WHERE product_id = ?""",
-            [product_id],
-        ).fetchone()
+        row = con.execute("""
+            SELECT product_id, product_name, brand, category, subcategory,
+                   price, description, skill_level, use_case, price_tier,
+                   in_stock, manufacturer_url
+            FROM main.dim_products WHERE product_id = ?
+        """, [product_id]).fetchone()
         if not row:
             return {"error": f"Product {product_id} not found"}
         cols = ["product_id", "product_name", "brand", "category", "subcategory",
-                "price", "description", "skill_level", "use_case", "price_tier", "in_stock",
-                "manufacturer_url"]
+                "price", "description", "skill_level", "use_case", "price_tier",
+                "in_stock", "manufacturer_url"]
         return {k: float(v) if isinstance(v, Decimal) else v for k, v in zip(cols, row)}
     finally:
         con.close()
@@ -143,7 +133,6 @@ def create_se_handoff(
     conversation_summary: str,
     priority: str = "medium",
 ) -> dict:
-    """Log a completed session as a Sales Engineer handoff record."""
     con = duckdb.connect(str(DB_PATH))
     try:
         con.execute("""
@@ -165,36 +154,25 @@ def create_se_handoff(
                 created_at           TIMESTAMP
             )
         """)
-
         handoff_id = f"H-{uuid.uuid4().hex[:8].upper()}"
         session_id = f"S-{uuid.uuid4().hex[:8].upper()}"
-        now = datetime.utcnow()
-
-        con.execute(
-            """INSERT INTO agent_handoffs
-               (handoff_id, session_id, customer_name, skill_level, primary_instrument,
-                use_case, budget_range, existing_gear, recommended_products,
-                conversation_summary, priority, status, created_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,'new',?)""",
-            [
-                handoff_id, session_id, customer_name, skill_level,
-                primary_instrument, use_case, budget_range, existing_gear,
-                json.dumps(recommended_product_ids), conversation_summary,
-                priority, now,
-            ],
-        )
-        return {
-            "status": "success",
-            "handoff_id": handoff_id,
-            "session_id": session_id,
-            "message": f"Handoff {handoff_id} logged and routed to a SoundCraft Sales Engineer.",
-        }
+        con.execute("""
+            INSERT INTO agent_handoffs
+            (handoff_id, session_id, customer_name, skill_level, primary_instrument,
+             use_case, budget_range, existing_gear, recommended_products,
+             conversation_summary, priority, status, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,'new',?)
+        """, [handoff_id, session_id, customer_name, skill_level, primary_instrument,
+              use_case, budget_range, existing_gear,
+              json.dumps(recommended_product_ids), conversation_summary,
+              priority, datetime.utcnow()])
+        return {"status": "success", "handoff_id": handoff_id, "session_id": session_id,
+                "message": f"Handoff {handoff_id} logged and routed to a SoundCraft Sales Engineer."}
     finally:
         con.close()
 
 
 def save_transcript(session_id: str, messages: list[dict]):
-    """Persist the full chat transcript for SE review."""
     con = duckdb.connect(str(DB_PATH))
     try:
         con.execute("""
@@ -214,62 +192,58 @@ def save_transcript(session_id: str, messages: list[dict]):
         con.close()
 
 
-# ── Tool schema declarations for Gemini ───────────────────────────────────────
+# ── Tool schemas for google-genai SDK ─────────────────────────────────────────
 
 TOOLS = [
-    {
-        "function_declarations": [
-            {
-                "name": "search_products",
-                "description": "Search the SoundCraft product catalog. Use this to find products matching customer needs.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "category":    {"type": "string", "description": "Product category or subcategory e.g. Guitar, Acoustic Guitar, Electric Guitar, Bass Guitar, Amplifier, Drums, Keys, Microphones, Recording, Pedals, Accessories"},
-                        "skill_level": {"type": "string", "description": "Customer skill level: beginner, intermediate, advanced"},
-                        "max_price":   {"type": "number", "description": "Maximum price in USD"},
-                        "min_price":   {"type": "number", "description": "Minimum price in USD"},
-                        "use_case":    {"type": "string", "description": "Use case: practice, live performance, studio recording, home studio"},
-                        "brand":       {"type": "string", "description": "Specific brand name"},
-                    },
+    types.Tool(function_declarations=[
+        types.FunctionDeclaration(
+            name="search_products",
+            description="Search the SoundCraft product catalog. Use this to find products matching customer needs.",
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "category":    types.Schema(type=types.Type.STRING, description="Product category or subcategory e.g. Guitar, Acoustic Guitar, Electric Guitar, Bass Guitar, Amplifier, Drums, Keys, Microphones, Recording, Pedals, Accessories"),
+                    "skill_level": types.Schema(type=types.Type.STRING, description="Customer skill level: beginner, intermediate, advanced"),
+                    "max_price":   types.Schema(type=types.Type.NUMBER, description="Maximum price in USD"),
+                    "min_price":   types.Schema(type=types.Type.NUMBER, description="Minimum price in USD"),
+                    "use_case":    types.Schema(type=types.Type.STRING, description="Use case: practice, live performance, studio recording, home studio"),
+                    "brand":       types.Schema(type=types.Type.STRING, description="Specific brand name"),
                 },
-            },
-            {
-                "name": "get_product_details",
-                "description": "Get full details for a specific product by its ID.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "product_id": {"type": "string", "description": "The product ID e.g. P0001"},
-                    },
-                    "required": ["product_id"],
+            ),
+        ),
+        types.FunctionDeclaration(
+            name="get_product_details",
+            description="Get full details for a specific product by its ID.",
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "product_id": types.Schema(type=types.Type.STRING, description="The product ID e.g. P0001"),
                 },
-            },
-            {
-                "name": "create_se_handoff",
-                "description": "Log this customer session as a Sales Engineer handoff. Call this after making recommendations OR immediately if customer requests a human.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "customer_name":           {"type": "string"},
-                        "skill_level":             {"type": "string"},
-                        "primary_instrument":      {"type": "string"},
-                        "use_case":                {"type": "string"},
-                        "budget_range":            {"type": "string"},
-                        "existing_gear":           {"type": "string", "description": "Gear the customer already owns"},
-                        "recommended_product_ids": {"type": "array", "items": {"type": "string"}},
-                        "conversation_summary":    {"type": "string", "description": "2-3 sentence warm summary for the SE"},
-                        "priority":                {"type": "string", "enum": ["low", "medium", "high"], "description": "Use 'high' if customer explicitly requested a human"},
-                    },
-                    "required": [
-                        "customer_name", "skill_level", "primary_instrument",
-                        "use_case", "budget_range", "existing_gear",
-                        "recommended_product_ids", "conversation_summary",
-                    ],
+                required=["product_id"],
+            ),
+        ),
+        types.FunctionDeclaration(
+            name="create_se_handoff",
+            description="Log this customer session as a Sales Engineer handoff. Call this after making recommendations OR immediately if customer requests a human.",
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "customer_name":           types.Schema(type=types.Type.STRING),
+                    "skill_level":             types.Schema(type=types.Type.STRING),
+                    "primary_instrument":      types.Schema(type=types.Type.STRING),
+                    "use_case":                types.Schema(type=types.Type.STRING),
+                    "budget_range":            types.Schema(type=types.Type.STRING),
+                    "existing_gear":           types.Schema(type=types.Type.STRING, description="Gear the customer already owns"),
+                    "recommended_product_ids": types.Schema(type=types.Type.ARRAY, items=types.Schema(type=types.Type.STRING)),
+                    "conversation_summary":    types.Schema(type=types.Type.STRING, description="2-3 sentence warm summary for the SE"),
+                    "priority":                types.Schema(type=types.Type.STRING, description="Use high if customer explicitly requested a human"),
                 },
-            },
-        ]
-    }
+                required=["customer_name", "skill_level", "primary_instrument", "use_case",
+                          "budget_range", "existing_gear", "recommended_product_ids",
+                          "conversation_summary"],
+            ),
+        ),
+    ])
 ]
 
 TOOL_DISPATCH: dict[str, Any] = {
@@ -284,48 +258,46 @@ TOOL_DISPATCH: dict[str, Any] = {
 class SoundCraftAgent:
     def __init__(self):
         api_key = get_secret("GOOGLE_API_KEY")
-        genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel(
-            model_name="gemini-2.5-flash",
-            system_instruction=SYSTEM_PROMPT,
-            tools=TOOLS,
-        )
-        self.chat = self.model.start_chat(history=[])
+        self.client = genai.Client(api_key=api_key)
+        self.history: list[types.Content] = []
         self.handoff_logged = False
         self.session_id: str | None = None
         self.last_recommended_ids: list[str] = []
 
     def send(self, user_message: str, transcript: list[dict]) -> tuple[str, dict | None]:
-        """
-        Send a message and handle any tool calls.
-        Returns (assistant_text, handoff_record_or_None).
-        transcript is the full UI message list for persistence.
-        """
-        response = self.chat.send_message(
-            user_message,
-            request_options={"timeout": 30},
-        )
+        self.history.append(types.Content(role="user", parts=[types.Part(text=user_message)]))
         handoff_result = None
 
         while True:
-            candidate = response.candidates[0]
+            response = self.client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=self.history,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    tools=TOOLS,
+                    http_options=types.HttpOptions(timeout=30000),
+                ),
+            )
 
+            self.history.append(response.candidates[0].content)
+
+            # Check for function calls
             tool_calls = [
-                part for part in candidate.content.parts
-                if hasattr(part, "function_call") and part.function_call.name
+                p for p in response.candidates[0].content.parts
+                if p.function_call is not None
             ]
 
             if not tool_calls:
                 text = "".join(
-                    part.text for part in candidate.content.parts
-                    if hasattr(part, "text")
+                    p.text for p in response.candidates[0].content.parts
+                    if hasattr(p, "text") and p.text
                 )
-                # Persist transcript if we have a session
                 if self.session_id:
                     save_transcript(self.session_id, transcript)
                 return text.strip(), handoff_result
 
-            tool_results = []
+            # Execute tool calls and collect results
+            result_parts = []
             for part in tool_calls:
                 fn_name = part.function_call.name
                 fn_args = dict(part.function_call.args)
@@ -339,22 +311,16 @@ class SoundCraftAgent:
                         self.session_id = result.get("session_id")
                         self.last_recommended_ids = fn_args.get("recommended_product_ids", [])
                         save_transcript(self.session_id, transcript)
-                elif fn_name == "search_products":
-                        # Track the most recently surfaced product IDs for card rendering
-                        self.last_recommended_ids = [r["product_id"] for r in result if isinstance(result, list)]
+                    elif fn_name == "search_products" and isinstance(result, list):
+                        self.last_recommended_ids = [r["product_id"] for r in result]
                 else:
                     result = {"error": f"Unknown tool: {fn_name}"}
 
-                tool_results.append(
-                    genai.protos.Part(
-                        function_response=genai.protos.FunctionResponse(
-                            name=fn_name,
-                            response={"result": json.dumps(result, cls=_SafeEncoder)},
-                        )
+                result_parts.append(types.Part(
+                    function_response=types.FunctionResponse(
+                        name=fn_name,
+                        response={"result": json.dumps(result, cls=_SafeEncoder)},
                     )
-                )
+                ))
 
-            response = self.chat.send_message(
-                tool_results,
-                request_options={"timeout": 30},
-            )
+            self.history.append(types.Content(role="user", parts=result_parts))
