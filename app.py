@@ -55,6 +55,10 @@ st.caption("Your personal gear advisor — powered by AI, backed by human expert
 st.divider()
 
 
+def _safe_md(text: str) -> str:
+    return text.replace('$', '&#36;')
+
+
 # ── Product card renderer ─────────────────────────────────────────────────────
 
 def fetch_products(product_ids: list[str]) -> list[dict]:
@@ -124,7 +128,8 @@ if "agent" not in st.session_state:
 # ── Chat history ──────────────────────────────────────────────────────────────
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"], avatar="🎵" if msg["role"] == "assistant" else "👤"):
-        st.markdown(msg["content"])
+        content = _safe_md(msg["content"]) if msg["role"] == "assistant" else msg["content"]
+        st.markdown(content, unsafe_allow_html=msg["role"] == "assistant")
         if msg.get("product_ids"):
             render_product_cards(msg["product_ids"])
 
