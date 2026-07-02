@@ -58,7 +58,6 @@ se_name = st.sidebar.selectbox(
     ["Sarah Chen", "Mike Torres", "Alex Rivera", "Jordan Kim"],
 )
 st.sidebar.divider()
-auto_refresh = st.sidebar.toggle("Auto-refresh (5s)", value=True)
 if st.sidebar.button("🔄 Refresh Now"):
     st.rerun()
 
@@ -216,6 +215,3 @@ else:
 
         st.markdown("")
 
-# ── Auto-refresh ──────────────────────────────────────────────────────────────
-if auto_refresh:
-    st.markdown('<meta http-equiv="refresh" content="5">', unsafe_allow_html=True)
