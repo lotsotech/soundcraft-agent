@@ -99,6 +99,11 @@ def ensure_db():
         # ── Mart tables ───────────────────────────────────────────────────────
         con.execute("""
             CREATE OR REPLACE TABLE dim_products AS
+            WITH deduped AS (
+                SELECT *
+                FROM stg_products
+                QUALIFY ROW_NUMBER() OVER (PARTITION BY product_name, price ORDER BY product_id) = 1
+            )
             SELECT
                 product_id,
                 product_name,
@@ -118,7 +123,7 @@ def ensure_db():
                 END                             AS price_tier,
                 string_split(skill_level, '-')  AS skill_levels_array,
                 manufacturer_url
-            FROM stg_products
+            FROM deduped
         """)
 
         con.execute("""

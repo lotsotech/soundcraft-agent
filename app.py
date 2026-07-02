@@ -60,6 +60,8 @@ st.divider()
 def fetch_products(product_ids: list[str]) -> list[dict]:
     if not DB_PATH.exists() or not product_ids:
         return []
+    seen = set()
+    product_ids = [p for p in product_ids if not (p in seen or seen.add(p))]
     con = duckdb.connect(str(DB_PATH), read_only=True)
     try:
         placeholders = ",".join(["?"] * len(product_ids))
@@ -79,6 +81,8 @@ def fetch_products(product_ids: list[str]) -> list[dict]:
 
 
 def render_product_cards(product_ids: list[str]):
+    seen = set()
+    product_ids = [p for p in product_ids if not (p in seen or seen.add(p))]
     products = fetch_products(product_ids)
     if not products:
         return
@@ -109,24 +113,18 @@ def render_product_cards(product_ids: list[str]):
 # ── Session state ─────────────────────────────────────────────────────────────
 if "agent" not in st.session_state:
     st.session_state.agent = SoundCraftAgent()
-    st.session_state.messages = []
-    st.session_state.handoff_data = None
-    st.session_state.escalated = False
-    st.session_state.recommended_ids = []
-
-    opening = (
+    st.session_state.messages = [{"role": "assistant", "content": (
         "Hey there! Welcome to SoundCraft — I'm Jamie. "
         "Whether you're just picking up your first instrument or looking to upgrade your rig, "
-        "I'm here to help you find exactly what you need.\n\n"
-        "What brings you in today?"
-    )
-    st.session_state.messages.append({"role": "assistant", "content": opening})
+        "I'm here to help you find exactly what you need.\n\nWhat brings you in today?"
+    )}]
+    st.session_state.handoff_data = None
+    st.session_state.escalated = False
 
 # ── Chat history ──────────────────────────────────────────────────────────────
-for i, msg in enumerate(st.session_state.messages):
+for msg in st.session_state.messages:
     with st.chat_message(msg["role"], avatar="🎵" if msg["role"] == "assistant" else "👤"):
         st.markdown(msg["content"])
-        # Render product cards attached to this message
         if msg.get("product_ids"):
             render_product_cards(msg["product_ids"])
 
@@ -155,51 +153,38 @@ if st.session_state.handoff_data:
 # ── Input ─────────────────────────────────────────────────────────────────────
 if prompt := st.chat_input("Tell Jamie what you're looking for..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user", avatar="👤"):
-        st.markdown(prompt)
 
-    with st.chat_message("assistant", avatar="🎵"):
-        with st.spinner("Jamie is thinking..."):
-            try:
-                reply, handoff = st.session_state.agent.send(
-                    prompt, st.session_state.messages
+    with st.spinner("Jamie is thinking..."):
+        try:
+            reply, handoff = st.session_state.agent.send(
+                prompt, st.session_state.messages
+            )
+            if handoff:
+                st.session_state.handoff_data = handoff
+                escalation_keywords = [
+                    "speak to a human", "talk to a person", "real person",
+                    "sales engineer", "talk to someone", "human", "person",
+                    "representative", "rep",
+                ]
+                st.session_state.escalated = any(
+                    k in prompt.lower() for k in escalation_keywords
                 )
-                if handoff:
-                    st.session_state.handoff_data = handoff
-                    escalation_keywords = [
-                        "speak to a human", "talk to a person", "real person",
-                        "sales engineer", "talk to someone", "human", "person",
-                        "representative", "rep",
-                    ]
-                    st.session_state.escalated = any(
-                        k in prompt.lower() for k in escalation_keywords
-                    )
-                    # Attach recommended product IDs to this message for card rendering
-                    rec_ids = handoff.get("recommended_product_ids", [])
-                    if not rec_ids:
-                        # Parse from the agent's tool call history if available
-                        rec_ids = st.session_state.recommended_ids
-            except Exception as e:
-                reply = f"Sorry, I ran into a technical issue: {e}"
-                handoff = None
-                rec_ids = []
+        except Exception as e:
+            reply = f"Sorry, I ran into a technical issue: {e}"
+            handoff = None
 
-        st.markdown(reply)
+    rec_ids = list(st.session_state.agent.last_recommended_ids) if hasattr(
+        st.session_state.agent, "last_recommended_ids"
+    ) else []
 
-        # Extract any product IDs mentioned in the reply for card rendering
-        rec_ids = st.session_state.agent.last_recommended_ids if hasattr(
-            st.session_state.agent, "last_recommended_ids"
-        ) else []
+    msg_entry = {"role": "assistant", "content": reply}
+    if rec_ids:
+        seen = set()
+        msg_entry["product_ids"] = [x for x in rec_ids if not (x in seen or seen.add(x))]
 
-        msg_entry = {"role": "assistant", "content": reply}
-        if rec_ids:
-            msg_entry["product_ids"] = rec_ids
-            render_product_cards(rec_ids)
+    st.session_state.messages.append(msg_entry)
+    st.rerun()
 
-        st.session_state.messages.append(msg_entry)
-
-    if st.session_state.handoff_data:
-        st.rerun()
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -240,6 +225,6 @@ with st.sidebar:
     st.page_link("pages/se_dashboard.py", label="Open SE Dashboard →", icon="🖥️")
 
     if st.button("🔄 Reset Conversation"):
-        for key in ["agent", "messages", "handoff_data", "escalated", "recommended_ids"]:
+        for key in ["agent", "messages", "handoff_data", "escalated"]:
             st.session_state.pop(key, None)
         st.rerun()

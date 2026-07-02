@@ -2,6 +2,12 @@ with products as (
     select * from {{ ref('stg_products') }}
 ),
 
+deduped as (
+    select *
+    from products
+    qualify row_number() over (partition by product_name, price order by product_id) = 1
+),
+
 enriched as (
     select
         product_id,
@@ -26,7 +32,7 @@ enriched as (
         -- denormalized skill array for overlap matching
         string_split(skill_level, '-')              as skill_levels_array,
         manufacturer_url
-    from products
+    from deduped
 )
 
 select * from enriched

@@ -39,8 +39,7 @@ Key behaviors:
 - BUDGET: Honoring the customer's stated budget is non-negotiable. When a customer gives a price ("around $3500", "about $500", "my budget is $1200"), ALWAYS pass that exact number as target_price in search_products — do NOT omit it. The search ranks results by proximity to that price, so without target_price you will return the cheapest items in the catalog, not the ones that match the customer's budget. Never recommend products far below the customer's stated budget without explicitly asking if they want a more affordable option.
 - CATALOG SCOPE: SoundCraft specializes in guitars, bass, drums, keys, microphones, amplifiers, recording gear, effects pedals, and accessories. If a customer asks about something outside this catalog (violins, orchestral instruments, brass, woodwinds, etc.), be upfront and warm: "That's actually outside our specialty at SoundCraft — we focus on guitars, keys, drums, and recording gear. For that I'd point you toward a dedicated orchestral shop." Do NOT pretend it is a search tool failure.
 - If a search returns empty results, retry with a broader category term before giving up (e.g. try "Guitar" if "Acoustic Guitar beginner" returns nothing). Never tell the customer the search tool is broken or having technical issues.
-- When you have enough context to make recommendations, call create_se_handoff to log the session
-- ESCALATION: If the customer explicitly asks to speak to a human, talk to a person, or requests a Sales Engineer at any point, you MUST immediately call create_se_handoff with priority="high" and tell the customer warmly that a specialist is on their way. Do not keep chatting — trigger the handoff right away.
+- ESCALATION: After making product recommendations, warmly offer the option: "Would you like me to have a SoundCraft Sales Engineer reach out to you? They can answer any follow-up questions and help you finalize your purchase." Only call create_se_handoff if (1) the customer accepts the offer, or explicitly asks to speak to a human at any point — use priority="high" and tell them warmly a specialist is on their way; OR (2) you have exhausted your ability to help and the customer's need cannot be resolved with the available tools. Never call create_se_handoff without the customer's consent.
 
 You represent SoundCraft's brand promise: the knowledgeable friend in the room, not a chatbot."""
 
@@ -100,7 +99,7 @@ def search_products(
             FROM main.dim_products
             WHERE {where}
             ORDER BY {order_clause}
-            LIMIT 5
+            LIMIT 3
         """, params).fetchall()
         cols = ["product_id", "product_name", "brand", "subcategory",
                 "price", "skill_level", "use_case", "price_tier"]
@@ -232,7 +231,7 @@ TOOLS = [
         ),
         types.FunctionDeclaration(
             name="create_se_handoff",
-            description="Log this customer session as a Sales Engineer handoff. Call this after making recommendations OR immediately if customer requests a human.",
+            description="Log this customer session as a Sales Engineer handoff. Only call this if the customer has accepted an offer to connect with a Sales Engineer, explicitly requested a human, or their need cannot be resolved with available tools.",
             parameters=types.Schema(
                 type=types.Type.OBJECT,
                 properties={
@@ -275,6 +274,7 @@ class SoundCraftAgent:
     def send(self, user_message: str, transcript: list[dict]) -> tuple[str, dict | None]:
         self.history.append(types.Content(role="user", parts=[types.Part(text=user_message)]))
         handoff_result = None
+        self.last_recommended_ids = []
 
         while True:
             response = self.client.models.generate_content(
@@ -320,7 +320,10 @@ class SoundCraftAgent:
                         self.last_recommended_ids = fn_args.get("recommended_product_ids", [])
                         save_transcript(self.session_id, transcript)
                     elif fn_name == "search_products" and isinstance(result, list):
-                        self.last_recommended_ids = [r["product_id"] for r in result]
+                        new_ids = [r["product_id"] for r in result]
+                        combined = self.last_recommended_ids + new_ids
+                        seen = set()
+                        self.last_recommended_ids = [x for x in combined if not (x in seen or seen.add(x))][:3]
                 else:
                     result = {"error": f"Unknown tool: {fn_name}"}
 
