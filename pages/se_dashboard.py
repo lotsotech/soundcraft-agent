@@ -3,7 +3,6 @@ SoundCraft SE Dashboard — internal Sales Engineer view
 Live handoff queue with full transcript access and claim workflow.
 """
 import json
-import time
 from pathlib import Path
 
 import duckdb
@@ -219,5 +218,4 @@ else:
 
 # ── Auto-refresh ──────────────────────────────────────────────────────────────
 if auto_refresh:
-    time.sleep(5)
-    st.rerun()
+    st.markdown('<meta http-equiv="refresh" content="5">', unsafe_allow_html=True)
