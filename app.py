@@ -141,7 +141,7 @@ def browse_products(categories: list[str], max_price: float) -> list[dict]:
                 LEFT JOIN main.inventory i USING (product_id)
                 WHERE {where} AND NOT p.product_name LIKE '%Bundle%'
                 ORDER BY p.category, p.price
-                LIMIT 12""",
+                LIMIT 3""",
             params,
         ).fetchall()
         cols = ["product_id", "product_name", "brand", "category", "price",
