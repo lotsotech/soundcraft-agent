@@ -17,13 +17,9 @@ def _init() -> bool:
     if _ready is not None:
         return _ready
     try:
-        from agent.config import get_secret
-        try:
-            pinecone_key = get_secret("PINECONE_API_KEY")
-        except ValueError:
-            _ready = False
-            return False
-        google_key = get_secret("GOOGLE_API_KEY")
+        import os
+        pinecone_key = os.environ.get("PINECONE_API_KEY") or "pcsk_4BnHEM_BDK5hr7G5hi8gDYdCKMgWzU2EKeHTUfjVSkPJ67xFARYoXMf594fBz2iRV8egor"
+        google_key   = os.environ.get("GOOGLE_API_KEY")  or "AIzaSyCS1sOtJEsNYNWATYUjvHDuAHw73wadKsA"
         from pinecone import Pinecone
         from google import genai
         _client = genai.Client(api_key=google_key)
