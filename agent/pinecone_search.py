@@ -18,8 +18,12 @@ def _init() -> bool:
         return _ready
     try:
         from agent.config import get_secret
-        pinecone_key = get_secret("PINECONE_API_KEY")
-        google_key   = get_secret("GOOGLE_API_KEY")
+        try:
+            pinecone_key = get_secret("PINECONE_API_KEY")
+        except ValueError:
+            _ready = False
+            return False
+        google_key = get_secret("GOOGLE_API_KEY")
         from pinecone import Pinecone
         from google import genai
         _client = genai.Client(api_key=google_key)
