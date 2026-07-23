@@ -56,6 +56,7 @@ class _SafeEncoder(json.JSONEncoder):
 # ── Tool implementations ───────────────────────────────────────────────────────
 
 def search_products(
+    query: str = None,
     category: str = None,
     skill_level: str = None,
     max_price: float = None,
@@ -64,10 +65,22 @@ def search_products(
     use_case: str = None,
     brand: str = None,
 ) -> list[dict]:
+    # Semantic pre-filter: narrow candidates by meaning before structured filters apply
+    semantic_ids: list[str] = []
+    if query:
+        from agent.pinecone_search import semantic_search
+        semantic_ids = semantic_search(query)
+
     con = duckdb.connect(str(DB_PATH), read_only=True)
     try:
         conditions = ["in_stock = true"]
-        params = []
+        params: list = []
+
+        if semantic_ids:
+            ph = ",".join(["?"] * len(semantic_ids))
+            conditions.append(f"product_id IN ({ph})")
+            params.extend(semantic_ids)
+
         if category:
             conditions.append("(lower(category) LIKE lower(?) OR lower(subcategory) LIKE lower(?))")
             params.extend([f"%{category}%", f"%{category}%"])
@@ -88,11 +101,22 @@ def search_products(
             params.append(f"%{brand}%")
 
         where = " AND ".join(conditions)
-        # Sort by proximity to target_price when given; otherwise cheapest first
+
+        # Ordering: price proximity > semantic rank > cheapest first
         if target_price is not None:
             order_clause = f"ABS(price - {float(target_price)})"
+            order_params: list = []
+        elif semantic_ids:
+            # Preserve Pinecone's relevance ranking within the SQL result set
+            cases = " ".join(
+                f"WHEN product_id = ? THEN {i}" for i, _ in enumerate(semantic_ids)
+            )
+            order_clause = f"CASE {cases} ELSE {len(semantic_ids)} END"
+            order_params = list(semantic_ids)
         else:
             order_clause = "price ASC"
+            order_params = []
+
         rows = con.execute(f"""
             SELECT product_id, product_name, brand, subcategory,
                    price, skill_level, use_case, price_tier
@@ -100,7 +124,7 @@ def search_products(
             WHERE {where}
             ORDER BY {order_clause}
             LIMIT 3
-        """, params).fetchall()
+        """, params + order_params).fetchall()
         cols = ["product_id", "product_name", "brand", "subcategory",
                 "price", "skill_level", "use_case", "price_tier"]
         return [{k: float(v) if isinstance(v, Decimal) else v for k, v in zip(cols, row)}
@@ -208,6 +232,7 @@ TOOLS = [
             parameters=types.Schema(
                 type=types.Type.OBJECT,
                 properties={
+                    "query":        types.Schema(type=types.Type.STRING, description="Natural language description of what the customer wants, e.g. 'warm vintage blues tone for small venues' or 'heavy metal rhythm guitar with tight low end'. Use this for vague or descriptive requests to enable semantic matching alongside structured filters."),
                     "category":     types.Schema(type=types.Type.STRING, description="Product category or subcategory e.g. Guitar, Acoustic Guitar, Electric Guitar, Bass Guitar, Amplifier, Drums, Keys, Microphones, Recording, Pedals, Accessories"),
                     "skill_level":  types.Schema(type=types.Type.STRING, description="Customer skill level: beginner, intermediate, advanced"),
                     "max_price":    types.Schema(type=types.Type.NUMBER, description="Hard upper price limit in USD. Only set when customer says 'under X' or 'no more than X'."),

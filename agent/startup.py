@@ -172,4 +172,12 @@ def ensure_db():
             FROM raw_se_handoffs
         """)
 
+        con.execute("""
+            CREATE OR REPLACE TABLE inventory AS
+            SELECT
+                product_id,
+                CAST(quantity AS INTEGER) AS quantity
+            FROM raw_inventory
+        """)
+
         con.close()
