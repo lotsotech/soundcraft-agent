@@ -90,11 +90,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ── Header ────────────────────────────────────────────────────────────────────
-st.image("assets/soundcraft_logo.png", width=320)
-st.caption("Your personal gear advisor — powered by AI, backed by human experts")
-st.divider()
-
 
 def _safe_md(text: str) -> str:
     return text.replace('$', '&#36;')
@@ -352,6 +347,9 @@ if prompt := st.chat_input("Tell Jamie what you're looking for..."):
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
+    st.image("assets/soundcraft_logo.png", use_container_width=True)
+    st.caption("Your personal gear advisor — powered by AI, backed by human experts")
+    st.divider()
     st.header("🧑‍💼 Sales Engineer View")
     st.caption("Live handoff queue")
 
