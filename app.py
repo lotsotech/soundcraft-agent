@@ -52,6 +52,7 @@ st.markdown("""
         flex-direction: column;
         gap: 8px;
         margin-top: 8px;
+        width: 100%;
     }
     .product-tile {
         background: #1a1a2e;
@@ -61,6 +62,12 @@ st.markdown("""
         display: flex;
         flex-direction: column;
         gap: 3px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    /* Ensure Streamlit's markdown wrapper doesn't cap tile width */
+    [data-testid="stMarkdownContainer"] {
+        width: 100%;
     }
     .tile-brand { color: #e85d04; font-weight: 600; font-size: 0.75rem; }
     .tile-name  { font-weight: 700; font-size: 0.88rem; }
@@ -252,8 +259,6 @@ with chat_col:
         with st.chat_message(msg["role"], avatar="🎵" if msg["role"] == "assistant" else "👤"):
             content = _safe_md(msg["content"]) if msg["role"] == "assistant" else msg["content"]
             st.markdown(content, unsafe_allow_html=msg["role"] == "assistant")
-            if msg.get("product_ids"):
-                render_product_cards(msg["product_ids"])
 
     if st.session_state.handoff_data:
         hd = st.session_state.handoff_data
